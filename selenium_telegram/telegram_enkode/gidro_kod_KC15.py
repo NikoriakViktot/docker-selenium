@@ -2,71 +2,27 @@ import re
 
 # from class_station_index.class_gidro_station_index import Gidro_station_index
 
-
-class GidroTelegrame:
-
-    def __init__(self, **kwargs):
-        self.index_hydro_station = kwargs.get('index_station')
-        self.date_telegram = kwargs.get('date_telegram')
-        self.__time_telegram = kwargs.get('time_telegram')
-        self.gauges_telegrame = kwargs.get('gauges_telegrame')
-        self.telegrame_split = kwargs.get('gauges_telegrame')
-        self._telegram_report = self.telegram_report
-        self._telegrame = kwargs.get('gauges_telegrame')
+from typing import NamedTuple
 
 
+class Telegram_standard_tupl(NamedTuple):
+    # telegram_report:bool
+    # index_station:str
+    # date_telegram: str
+    # time_telegram: str = None
+    observation_period: str = None
+    water_level_08_00:int = None
+    level_change: int = None
+    water_level_20_00:int = None
+    temperature_air:float = None
+    water_discharge:float= None
+    precipitation_day:float = None
+    precipitation_day_intensity:str = None
+    precipitation_daytime_08_20:float = None
+    precipitation_daytime_08_20_intensity:str= None
 
 
-    @property
-    def index_hydro_station(self):
-        return self._index
 
-    @index_hydro_station.setter
-    def index_hydro_station(self, index):
-        self._index = index
-
-    @property
-    def date_telegram_(self):
-        return self.date_telegram[0:10]
-
-    @property
-    def time_telegram(self):
-        # if ''.__eq__(self._date_telegram[11:]):
-        #     return None
-        # else:
-        return self.__time_telegram
-
-
-    @property
-    def gauges_telegrame_(self):
-        return self._telegrame
-
-    @gauges_telegrame_.setter
-    def gauges_telegrame_(self, telegrame):
-        try:
-            self._telegrame = telegrame
-        except:
-            self._telegrame = None
-
-
-    @property
-    def telegrame_split(self):
-        return self._telegrame_split
-
-    @telegrame_split.setter
-    def telegrame_split(self, telegrame_split):
-        try:
-            telegram_split = [re.sub(("="), "", i) for i in [y for y in telegrame_split.split(' ')]]
-            self._telegrame_split = tuple(telegram_split)
-        except:
-            self._telegrame_split = None
-
-    @property
-    def telegram_report(self):
-        if self.gauges_telegrame is None:
-            return self._index, False
-        else:
-            return self._index, True
 
 
 
@@ -436,13 +392,8 @@ class KC15(GidroTelegrame):
             return  None
 
 
-
     def report(self):
-        report = [self.telegram_report[1],
-                  self.index_hydro_station,
-                  self.date_telegram_,
-                  self.time_telegram,
-                  self.observation_period_group,
+        report = [self.observation_period_group,
                   self.water_level_08(),
                   self.level_change(),
                   self.water_level_20_00(),
@@ -451,11 +402,21 @@ class KC15(GidroTelegrame):
                   self.precipitation_day(),
                   self.precipitation_day_intensity(),
                   self.precipitation_daytime(),
-                  self.precipitation_daytime_intensity(),
-                  self.gauges_telegrame_]
+                  self.precipitation_daytime_intensity()]
         return tuple(report)
+    
 
+    def report_dict(self): 
+        report_dict = dict(Telegram_standard_tupl(*self.report())._asdict())
+        return report_dict
+    
+if __name__ == '__main__':
+    d ={'date_telegram': '2023-06-05', 
+    'time_telegram': '08:00:00', 
+    'index_station': '42187',
+    'gauges_telegram': '42187 05081 10051 20032 30052 82163 00000 98804 00000='}
 
-    def __call__(self, *args, **kwargs):
-        return self.report()
-
+    c = KC15(**d)
+    print(c.report())
+    print(c.report_dict())
+  

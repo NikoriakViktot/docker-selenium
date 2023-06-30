@@ -1,0 +1,97 @@
+Created by PLY version 3.11 (http://www.dabeaz.com/ply)
+
+Grammar
+
+Rule 0     S' -> groups
+Rule 1     groups -> group groups
+Rule 2     groups -> group
+Rule 3     groups -> empty
+Rule 4     data -> INDEX DATE_TIME groups PRECIPITATION
+Rule 5     group -> GROUP
+Rule 6     empty -> <empty>
+
+Terminals, with rules where they appear
+
+DATE_TIME            : 4
+GROUP                : 5
+INDEX                : 4
+PRECIPITATION        : 4
+error                : 
+
+Nonterminals, with rules where they appear
+
+data                 : 
+empty                : 3
+group                : 1 2
+groups               : 1 4 0
+
+Parsing method: LALR
+
+state 0
+
+    (0) S' -> . groups
+    (1) groups -> . group groups
+    (2) groups -> . group
+    (3) groups -> . empty
+    (5) group -> . GROUP
+    (6) empty -> .
+
+    GROUP           shift and go to state 4
+    $end            reduce using rule 6 (empty -> .)
+
+    groups                         shift and go to state 1
+    group                          shift and go to state 2
+    empty                          shift and go to state 3
+
+state 1
+
+    (0) S' -> groups .
+
+
+
+state 2
+
+    (1) groups -> group . groups
+    (2) groups -> group .
+    (1) groups -> . group groups
+    (2) groups -> . group
+    (3) groups -> . empty
+    (5) group -> . GROUP
+    (6) empty -> .
+
+  ! reduce/reduce conflict for $end resolved using rule 2 (groups -> group .)
+    $end            reduce using rule 2 (groups -> group .)
+    GROUP           shift and go to state 4
+
+  ! $end            [ reduce using rule 6 (empty -> .) ]
+
+    group                          shift and go to state 2
+    groups                         shift and go to state 5
+    empty                          shift and go to state 3
+
+state 3
+
+    (3) groups -> empty .
+
+    $end            reduce using rule 3 (groups -> empty .)
+
+
+state 4
+
+    (5) group -> GROUP .
+
+    GROUP           reduce using rule 5 (group -> GROUP .)
+    $end            reduce using rule 5 (group -> GROUP .)
+
+
+state 5
+
+    (1) groups -> group groups .
+
+    $end            reduce using rule 1 (groups -> group groups .)
+
+WARNING: 
+WARNING: Conflicts:
+WARNING: 
+WARNING: reduce/reduce conflict in state 2 resolved using rule (groups -> group)
+WARNING: rejected rule (empty -> <empty>) in state 2

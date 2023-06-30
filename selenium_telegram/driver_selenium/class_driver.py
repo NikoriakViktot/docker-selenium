@@ -8,16 +8,21 @@ from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.action_chains import ActionChains
+from pymongo import MongoClient
 
-
+from driver_selenium.soup_read_file import SoupHtmlFile
 from .UKR_CGM_webelement import *
 from .html_telegrame import SaveHtmlFile
-
+from mongo_db.mongo_tools import MongoDb
+from telegram_enkode.gidro_kod_KC15 import KC15
+MONGO_URL='mongodb://mongo:27017/'
+client = MongoClient(MONGO_URL)
+db = client["telegram"]
 
 def get_user_agent():
     return UserAgent(verify_ssl=False).random
 
-class Driver:
+class TelegramParser:
     driver: WebDriver = None
     url = 'http://gcst.meteo.gov.ua/armua/sino/index.phtml'
     user = 'chernovcgm'
@@ -92,14 +97,13 @@ class Driver:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, **request):
+    def __init__(self):
         self.driver = self.get_driver()
-        Driver.request = request
         self.execute_cmd("Network.enable", {})
         # load_dotenv()
         self.execute_cmd("Network.setExtraHTTPHeaders",
                          {"headers": self.get_auth_header(self.user, self.password)})
-        self.driver.get(self.url)
+        self.get_with_retry()
 
     @classmethod
     def get_driver(cls):
@@ -122,8 +126,21 @@ class Driver:
         cls.driver = driver
         cls.actions = ActionChains(driver) 
         return cls.driver
-            
-     
+
+    @classmethod       
+    def get_with_retry(cls, max_retries=3, retry_interval=900):
+        retries = 0
+        while retries < max_retries:
+            try:
+                cls.driver.get(cls.url)
+                return  
+            except Exception as e:
+                print(f"Помилка при з'єднанні з сервером: {str(e)}")
+                print(f"Повторна спроба з'єднанні з сервером через {retry_interval} ceк.")
+                time.sleep(retry_interval)
+                retries += 1
+        print("Досягнуто максимальну кількість спроб. Виконання запиту не вдалося.")
+
 
     @staticmethod
     def get_auth_header(user, password):
@@ -307,13 +324,41 @@ class Driver:
     
     @classmethod
     def __call__(cls, *args, **kwargs):
-        for x in cls.list_logik():
-            x()
-            time.sleep(1)
-       
+        cls.request = kwargs
+        cls.save_html()
+        cls.restart_session()
+        save_report = MongoDb(cls.typeTelegram())
+        save_report.save_document()
+
+        # file_html = SoupHtmlFile()
+        # type_telegram = 
+        # if type_telegram in db.list_collection_names():
+        #     collection = db[type_telegram]
+        # else:
+        #     collection = db.create_collection(type_telegram)
+        # for report_today in file_html.report():
+        #     id_teleg = report_today.id_telegrame
+        #     date_tel = report_today.date_telegram
+        #     time_teleg = report_today.time_telegram
+        #     index_post = report_today.index_station
+        #     text_telegram = report_today.gauges_telegrame 
+        #     data_telegram = {
+        #         "date_telegram": date_tel,
+        #         "time_telegram": time_teleg,
+        #         "index_station": index_post,
+        #         "gauges_telegram": text_telegram}
+        #     if type_telegram == 'hydro':
+        #         decode_tel = KC15(data_telegram)
+        #         mesured_data = decode_tel.report_dict()
+        #     else:
+        #         mesured_data = None    
+        #     document_mongo = {
+        #     "id_telegram": id_teleg,
+        #     "data": [data_telegram, mesured_data]}
+        #     get_id = collection.find_one({"id_telegram": id_teleg})
+        #     if get_id is None:
+        #         collection.insert_one(document_mongo)
 
 
 
-if __name__ == '__main__':
-    d = Driver()
-    # print(d.my_driver.session_id)
+

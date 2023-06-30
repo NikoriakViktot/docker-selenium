@@ -1,6 +1,6 @@
 import uvicorn
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import Optional
 import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -8,7 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 import requests
 
 from driver_selenium.soup_read_file import SoupHtmlFile
-from driver_selenium.class_driver import Driver
+from driver_selenium.class_driver import TelegramParser
 from redis_tools.tools import RedisTools
 from pymongo import MongoClient
 
@@ -29,10 +29,9 @@ def send_telegram_post(type_telegram):
         "dateFinishInput": "string",
         "timeStartingInput": "string",
         "timeFinishInput": "string"
-    }
-    
+    }    
     # Виконання POST-запиту до /telegram
-    response = requests.post('http://localhost:8000/telegram', json=data)
+    response = requests.post('http://localhost:8000/selenium_telegram', json=data)
     return response
     
   
@@ -58,70 +57,136 @@ class TypeTelegram(BaseModel):
     timeStartingInput: Optional[str] = None
     timeFinishInput: Optional[str] = None
 
+    @validator('*')
+    def check_string_fields(cls, v):
+        return None if v == 'string' else v
+
+    @validator('typeTelegram')
+    def check_typeTelegram(cls, v):
+        allowed_values = ["hydro", "meteo"]
+        if v not in allowed_values:
+            raise ValueError(f'typeTelegram must be one of {allowed_values}')
+        return v
+    
+class PostTelegrame(BaseModel):
+    typeTelegram: Optional[str]
+    indexStation: Optional[str]
+    date: Optional[str]
+    time: Optional[str]
+
+
 
 app = FastAPI()
 
 @app.on_event("startup")
 async def startup_event():
-    Driver.restart_session()
+    TelegramParser.restart_session()
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    Driver.restart_session()
+    TelegramParser.restart_session()
 
+
+
+@app.post("/selenium_telegram")
+def my_post_route(type_telegram: TypeTelegram):
+    driver = TelegramParser()
+    driver(**type_telegram.dict())
+    return {"message": "Дані успішно отримані"}
 
 
 @app.post("/telegram")
-def my_post_route(type_telegram: TypeTelegram):
-
-    type_telegram.typeTelegram = None if type_telegram.typeTelegram == 'string' else type_telegram.typeTelegram
-    type_telegram.indexStation = None if type_telegram.indexStation == 'string' else type_telegram.indexStation
-    type_telegram.numberMessages = None if type_telegram.numberMessages == 'string' else type_telegram.numberMessages
-    type_telegram.dateStartingInput = None if type_telegram.dateStartingInput == 'string' else type_telegram.dateStartingInput
-    type_telegram.dateFinishInput = None if type_telegram.dateFinishInput == 'string' else type_telegram.dateFinishInput
-    type_telegram.timeStartingInput = None if type_telegram.timeStartingInput == 'string' else type_telegram.timeStartingInput
-    type_telegram.timeFinishInput = None if type_telegram.timeFinishInput == 'string' else type_telegram.timeFinishInput
-   
-    data_for_selenium = {
-        "typeTelegram": type_telegram.typeTelegram,
-        "indexStation": type_telegram.indexStation,
-        "numberMessages": type_telegram.numberMessages,
-        "dateStartingInput": type_telegram.dateStartingInput,
-        "dateFinishInput": type_telegram.dateFinishInput,
-        "timeStartingInput": type_telegram.timeStartingInput,
-        "timeFinishInput": type_telegram.timeFinishInput
-    }
-  
-    d = Driver(**data_for_selenium)
-    print(d.driver)
-    d()
-    file_html = SoupHtmlFile()
-    # collection = db[type_telegram.typeTelegram]  # Динамічна назва колекції
-    
-    if type_telegram.typeTelegram in db.list_collection_names():
-        collection = db[type_telegram.typeTelegram]
+def post_data(post_request:PostTelegrame):
+    collection_name = post_request.typeTelegram
+    index_station = post_request.indexStation
+    date = post_request.date
+    time = post_request.time
+    id_teleg = index_station+date+time
+    collection = db[collection_name]
+    data = collection.find_one({"id_telegram": id_teleg}, {"_id": False})
+    if data is None:
+        return {"message": "Дані за цей період відсутні"}
     else:
-        collection = db.create_collection(type_telegram.typeTelegram)
-    print(collection)
-    for report_today in file_html.report():
-        print(report_today)
-        id_teleg = report_today.id_telegrame
-        date_tel = report_today.date_telegram
-        time_teleg = report_today.time_telegram
-        index_post = report_today.index_station
-        text_telegram = report_today.gauges_telegrame 
-        data = {"date_telegram": date_tel,
-                "time_telegram": time_teleg,
-                "index_station": index_post,
-                "gauges_telegram": text_telegram}
-        document_mongo = {
-            "id_telegram": id_teleg,
-            "data": data}
-        get_id = collection.find_one({"id_telegram": id_teleg})
-        print(get_id)
-        print(document_mongo)
-        if get_id is None:
-            collection.insert_one(document_mongo)
+        data['data'] = str(data['data'])
+        return data
+
+
+@app.get("/telegram/{collection_name}/{id_teleg}")
+def get_data_from_collection(collection_name: str, id_teleg: str):
+    collection = db[collection_name]
+    data = collection.find_one({"id_telegram": id_teleg}, {"_id": False})
+    if data is None:
+        return {"message": "Дані за цей період відсутні"}
+    else:
+        data['data'] = str(data['data'])
+        return data
+    
+
+@app.delete("/telegram/{collection_name}/{id_teleg}")
+def delete_data_from_collection(collection_name: str, id_teleg: str):
+    collection = db[collection_name]
+    result = collection.delete_one({"id_telegram": id_teleg})
+    if result.deleted_count == 1:
+        return {"message": "Дані успішно видалено"}
+    else:
+        return {"message": "Дані за цей id не знайдені"}
+    
+
+@app.put("/telegram/{collection_name}/{id_teleg}")
+def update_data_in_collection(collection_name: str, id_teleg: str, dynamic_updates: dict):
+    collection = db[collection_name]
+    dynamic_updates = {}
+    update_fields = {
+    f"data.$[item].{field}": value
+    for field, value in dynamic_updates.items()}
+    result = collection.update_one(
+                       {"id_telegram": id_teleg},
+                       {"$set": update_fields})
+    
+    if result.modified_count == 1:
+        return {"message": "Дані успішно оновлено"}
+    else:
+        return {"message": "Дані за цей id не знайдені"}
+
+
+
+@app.get("/")
+async def root():
+    return {"message": "Hello World"}
+
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="localhost", port=8000)
+
+
+  # file_html = SoupHtmlFile()
+    # # collection = db[type_telegram.typeTelegram]  # Динамічна назва колекції
+    
+    # if type_telegram.typeTelegram in db.list_collection_names():
+    #     collection = db[type_telegram.typeTelegram]
+    # else:
+    #     collection = db.create_collection(type_telegram.typeTelegram)
+    # print(collection)
+    # for report_today in file_html.report():
+    #     print(report_today)
+    #     id_teleg = report_today.id_telegrame
+    #     date_tel = report_today.date_telegram
+    #     time_teleg = report_today.time_telegram
+    #     index_post = report_today.index_station
+    #     text_telegram = report_today.gauges_telegrame 
+    #     data = {"date_telegram": date_tel,
+    #             "time_telegram": time_teleg,
+    #             "index_station": index_post,
+    #             "gauges_telegram": text_telegram}
+    #     document_mongo = {
+    #         "id_telegram": id_teleg,
+    #         "data": data}
+    #     get_id = collection.find_one({"id_telegram": id_teleg})
+    #     print(get_id)
+    #     print(document_mongo)
+    #     if get_id is None:
+    #         collection.insert_one(document_mongo)
 
     
     # for report_today in file_html.report():
@@ -143,31 +208,3 @@ def my_post_route(type_telegram: TypeTelegram):
     #         redis.set_telegrame(**yesterday)
     #         redis.pub(chanel=f'{type_telegram.typeTelegram}', **yesterday)
     #         redis.__redis.delete(id_teleg)
-    return {"message": "Дані успішно отримані"}
-
-
-
-@app.get("/telegram/{collection_name}/{id_teleg}")
-def get_data_from_collection(collection_name: str, id_teleg: str):
-    collection = db[collection_name]
-    data = collection.find_one({"id_telegram": id_teleg}, {"_id": False})
-
-    if data is None:
-        return {"message": "Дані за цей період відсутні"}
-    else:
-        data['data'] = str(data['data'])
-        return data
-    
-
-
-
-
-
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="localhost", port=8000)
