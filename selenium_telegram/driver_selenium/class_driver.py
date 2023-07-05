@@ -14,10 +14,12 @@ from driver_selenium.soup_read_file import SoupHtmlFile
 from .UKR_CGM_webelement import *
 from .html_telegrame import SaveHtmlFile
 from mongo_db.mongo_tools import MongoDb
-from telegram_enkode.gidro_kod_KC15 import KC15
+from telegram_decode.gidro_kod_KC15 import KC15
+from telegram_decode.class_telegrame import TelegramFactory
+
 MONGO_URL='mongodb://mongo:27017/'
 client = MongoClient(MONGO_URL)
-db = client["telegram"]
+db = MongoDb
 
 def get_user_agent():
     return UserAgent(verify_ssl=False).random
@@ -323,42 +325,42 @@ class TelegramParser:
         return list_log
     
     @classmethod
-    def __call__(cls, *args, **kwargs):
+    def __call__(cls, **kwargs):
         cls.request = kwargs
         cls.save_html()
         cls.restart_session()
-        save_report = MongoDb(cls.typeTelegram())
-        save_report.save_document()
+        cls.process_telegram()
+        # save_report = MongoDb(cls.typeTelegram())
+        # save_report.save_document()
+    
+    @classmethod
+    def process_telegram(cls):
+          # Шаг 1: парсимо HTML файл
+        for report_today in SoupHtmlFile().report():
+            id_teleg = report_today.id_telegrame
+            date_tel = report_today.date_telegram
+            time_teleg = report_today.time_telegram
+            index_post = report_today.index_station
+            text_telegram = report_today.gauges_telegrame
+            data_telegram = {
+                "id_teleg": id_teleg,
+                "date_telegram": date_tel,
+                "time_telegram": time_teleg,
+                "index_station": index_post,
+                "gauges_telegram": text_telegram}
+            telegram_obj = TelegramFactory.create_telegram(cls.typeTelegram(), **data_telegram)
+            if cls.typeTelegram() == 'hydro':
+                decoded_telegram = telegram_obj.parse()
 
-        # file_html = SoupHtmlFile()
-        # type_telegram = 
-        # if type_telegram in db.list_collection_names():
-        #     collection = db[type_telegram]
-        # else:
-        #     collection = db.create_collection(type_telegram)
-        # for report_today in file_html.report():
-        #     id_teleg = report_today.id_telegrame
-        #     date_tel = report_today.date_telegram
-        #     time_teleg = report_today.time_telegram
-        #     index_post = report_today.index_station
-        #     text_telegram = report_today.gauges_telegrame 
-        #     data_telegram = {
-        #         "date_telegram": date_tel,
-        #         "time_telegram": time_teleg,
-        #         "index_station": index_post,
-        #         "gauges_telegram": text_telegram}
-        #     if type_telegram == 'hydro':
-        #         decode_tel = KC15(data_telegram)
-        #         mesured_data = decode_tel.report_dict()
-        #     else:
-        #         mesured_data = None    
-        #     document_mongo = {
-        #     "id_telegram": id_teleg,
-        #     "data": [data_telegram, mesured_data]}
-        #     get_id = collection.find_one({"id_telegram": id_teleg})
-        #     if get_id is None:
-        #         collection.insert_one(document_mongo)
-
+            else:  # 'meteo'
+                decoded_telegram = telegram_obj.relative_telegam()
+            document_mongo = {
+            "id_telegram": id_teleg,
+            "data": [data_telegram, decoded_telegram]}
+            print(document_mongo)
+            # collection = db.db_manager.get_or_create_collection(cls.typeTelegram())
+            # db.db_manager.insert_document_if_not_exists(collection, document_mongo)
+    
 
 
 

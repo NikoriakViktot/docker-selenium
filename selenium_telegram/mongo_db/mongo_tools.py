@@ -4,7 +4,7 @@ from pymongo.errors import DuplicateKeyError
 from driver_selenium.soup_read_file import SoupHtmlFile
 
 from driver_selenium.html_telegrame import SaveHtmlFile
-from telegram_enkode.gidro_kod_KC15 import KC15
+from telegram_decode.gidro_kod_KC15 import KC15
 
 class DatabaseManager:
     def __init__(self, db):
@@ -56,25 +56,8 @@ class MongoDb:
         self.db = client["telegram"]
         self.db_manager = DatabaseManager(self.db)
 
-    def save_document(self, type_telegram):
-        collection = self.db_manager.get_or_create_collection(type_telegram)
-        for report_today in  SoupHtmlFile().report():
-            id_teleg = report_today.id_telegrame
-            date_tel = report_today.date_telegram
-            time_teleg = report_today.time_telegram
-            index_post = report_today.index_station
-            text_telegram = report_today.gauges_telegrame 
-            data_telegram = {
-                "id_teleg": id_teleg,
-                "date_telegram": date_tel,
-                "time_telegram": time_teleg,
-                "index_station": index_post,
-                "gauges_telegram": text_telegram}
-            mesured_data = self.decode_telegram(type_telegram, data_telegram)
-            document_mongo = {
-                "id_telegram": id_teleg,
-                "data": [data_telegram, mesured_data]}
-            self.db_manager.insert_document_if_not_exists(collection, document_mongo)
+    def save_document(self):
+        self.db_manager.insert_document_if_not_exists(collection, document_mongo)
 
     def get_water_level(self, type_telegram, id_telegram):
         return self.db_manager.get_water_level(type_telegram, id_telegram)

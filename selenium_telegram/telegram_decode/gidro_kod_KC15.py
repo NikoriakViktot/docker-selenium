@@ -7,9 +7,9 @@ from typing import NamedTuple
 
 class Telegram_standard_tupl(NamedTuple):
     # telegram_report:bool
-    # index_station:str
-    # date_telegram: str
-    # time_telegram: str = None
+    index_station:str
+    date_telegram: str
+    time_telegram: str = None
     observation_period: str = None
     water_level_08_00:int = None
     level_change: int = None
